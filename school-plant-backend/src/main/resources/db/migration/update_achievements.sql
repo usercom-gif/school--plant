@@ -1,0 +1,1 @@
+ALTER TABLE achievements ADD COLUMN adoption_duration_days INT DEFAULT 0 COMMENT '认养时长(天)'; ALTER TABLE achievements ADD COLUMN composite_score DECIMAL(5,2) DEFAULT 0.00 COMMENT '综合评分'; ALTER TABLE achievements MODIFY COLUMN plant_health_score DECIMAL(5,2) DEFAULT 0.00 COMMENT '植物健康分';

@@ -1,0 +1,4 @@
+dify:
+  api:
+    key: your_dify_api_key_here
+    url: https://api.dify.ai/v1

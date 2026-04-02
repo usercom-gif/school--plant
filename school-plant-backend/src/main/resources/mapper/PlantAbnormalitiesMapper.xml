@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.schoolplant.mapper.PlantAbnormalityMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.schoolplant.entity.PlantAbnormality">
+        <id column="id" property="id" />
+        <result column="plant_id" property="plantId" />
+        <result column="reporter_id" property="reporterId" />
+        <result column="maintainer_id" property="maintainerId" />
+        <result column="abnormality_type" property="abnormalityType" />
+        <result column="description" property="description" />
+        <result column="image_urls" property="imageUrls" />
+        <result column="suggested_solution" property="suggestedSolution" />
+        <result column="status" property="status" />
+        <result column="assigned_at" property="assignedAt" />
+        <result column="resolution_description" property="resolutionDescription" />
+        <result column="resolution_image_urls" property="resolutionImageUrls" />
+        <result column="materials_used" property="materialsUsed" />
+        <result column="effect_evaluation" property="effectEvaluation" />
+        <result column="resolved_at" property="resolvedAt" />
+        <result column="overtime_alert_sent" property="overtimeAlertSent" />
+        <result column="created_at" property="createdAt" />
+        <result column="updated_at" property="updatedAt" />
+    </resultMap>
+
+</mapper>
