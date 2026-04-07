@@ -37,7 +37,7 @@ service.interceptors.response.use(
         localStorage.removeItem("role");
         window.location.href = "/login";
       }
-      return Promise.reject(new Error(res.msg || "Error"));
+      return Promise.reject(new Error(res.msg || "错误"));
     } else {
       // Return the data field directly
       return res.data;
@@ -96,7 +96,7 @@ service.interceptors.response.use(
         const code = error.message.match(/\d+/)?.[0] || "未知";
         msg = `请求失败，状态码：${code}`;
       } else {
-        msg = error.message;
+        msg = "网络连接异常";
       }
     }
 

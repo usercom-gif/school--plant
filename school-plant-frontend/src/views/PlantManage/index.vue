@@ -676,7 +676,7 @@ const handleImageChange = (info: UploadChangeParam) => {
       formState.imageUrls = response.data.url;
       message.success("图片上传成功");
     } else {
-      message.error(response?.msg || "图片上传失败");
+      message.error(response?.msg || "上传失败");
     }
   } else if (info.file.status === "error") {
     message.error("图片上传失败");

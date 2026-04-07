@@ -248,7 +248,7 @@ const onFinish = async (values: any) => {
           window.location.href = "/user/overview";
         }, 500);
       } else {
-        message.error("登录失败：无效的响应");
+        message.error("登录失败");
       }
     } else {
       // Register

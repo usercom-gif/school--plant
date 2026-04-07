@@ -260,7 +260,7 @@ const handleFinish = (record: any) => {
         message.success("认养成果提交成功！");
         fetchData();
       } catch (e: any) {
-        message.error(e.message || "提交失败");
+        message.error("提交失败");
       }
     },
   });

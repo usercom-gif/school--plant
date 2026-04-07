@@ -265,7 +265,7 @@ const handleAvatarChange = (info: UploadChangeParam) => {
       profileForm.avatarUrl = response.data.url;
       message.success("头像上传成功");
     } else {
-      message.error(response?.msg || "头像上传失败");
+      message.error(response?.message || response?.msg || "头像上传失败");
     }
   } else if (info.file.status === "error") {
     message.error("头像上传失败");
@@ -295,7 +295,7 @@ const handleUpdateProfile = async (values: UpdateProfileParams) => {
     // For now, simple fetch.
     fetchUserData();
   } catch (error: any) {
-    message.error(error.message || "更新失败");
+    message.error("更新失败");
   } finally {
     updatingProfile.value = false;
   }
@@ -316,7 +316,7 @@ const handleUpdatePassword = async (values: UpdatePasswordParams) => {
     localStorage.removeItem("token");
     window.location.href = "/login";
   } catch (error: any) {
-    message.error(error.message || "密码修改失败");
+    message.error("密码修改失败");
   } finally {
     updatingPassword.value = false;
   }

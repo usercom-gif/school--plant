@@ -331,7 +331,7 @@ const saveSettings = async () => {
   } catch (e: any) {
     console.error(e);
     // Backend throws error if validation fails
-    // message.error(e.response?.data?.msg || '保存失败');
+    message.error(e.response?.data?.msg || e.message || '保存失败');
   } finally {
     settingsLoading.value = false;
   }
@@ -362,7 +362,7 @@ const handleCompleteUploadChange = (info: UploadChangeParam) => {
   if (info.file.status === "done") {
     const response = (info.file as any).response;
     if (!response || response.code !== 200) {
-      message.error(response?.msg || "图片上传失败");
+      message.error(response?.msg || "上传失败");
     }
   } else if (info.file.status === "error") {
     message.error("图片上传失败");

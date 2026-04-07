@@ -872,7 +872,7 @@ const handleImageChange = (info: UploadChangeParam) => {
       plantFormState.imageUrls = res.data.url;
       message.success("上传成功");
     } else {
-      message.error(res?.msg || "上传失败");
+      message.error(res?.message || "上传失败");
     }
   } else if (info.file.status === "error") {
     message.error("上传失败");
