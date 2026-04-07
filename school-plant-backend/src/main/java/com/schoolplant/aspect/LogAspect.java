@@ -204,9 +204,13 @@ public class LogAspect {
             ip = request.getRemoteAddr();
         }
         
-        // Handle IPv6 localhost
-        if ("0:0:0:0:0:0:0:1".equals(ip) || "::1".equals(ip)) {
-            return "127.0.0.1";
+        // Handle IPv6 localhost and local IP
+        if ("127.0.0.1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip) || "::1".equals(ip)) {
+            try {
+                ip = java.net.InetAddress.getLocalHost().getHostAddress();
+            } catch (java.net.UnknownHostException e) {
+                ip = "127.0.0.1";
+            }
         }
         
         // Handle multiple IPs in X-Forwarded-For

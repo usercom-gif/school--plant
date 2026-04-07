@@ -22,13 +22,8 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8080/api", // Backend context path is /api
         changeOrigin: true,
+        xfwd: true, // Forward real IP
         rewrite: (path) => path.replace(/^\/api/, ""),
-        // Logic: Frontend /api/auth/login -> Rewrite /auth/login -> Target http://localhost:8080/api/auth/login
-        // Wait.
-        // If I rewrite /api out, path becomes /auth/login.
-        // Target is .../api
-        // Final URL: http://localhost:8080/api/auth/login.
-        // This looks correct.
       },
     },
   },
