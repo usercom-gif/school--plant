@@ -49,6 +49,24 @@ public class GlobalExceptionHandler {
         return R.fail(400, "文件上传请求解析失败");
     }
 
+    @ExceptionHandler(org.springframework.web.bind.MethodArgumentNotValidException.class)
+    public R<?> handleMethodArgumentNotValidException(org.springframework.web.bind.MethodArgumentNotValidException e) {
+        String msg = e.getBindingResult().getAllErrors().get(0).getDefaultMessage();
+        return R.fail(400, msg != null ? msg : "参数校验失败");
+    }
+
+    @ExceptionHandler(org.springframework.validation.BindException.class)
+    public R<?> handleBindException(org.springframework.validation.BindException e) {
+        String msg = e.getBindingResult().getAllErrors().get(0).getDefaultMessage();
+        return R.fail(400, msg != null ? msg : "参数校验失败");
+    }
+
+    @ExceptionHandler(jakarta.validation.ConstraintViolationException.class)
+    public R<?> handleConstraintViolationException(jakarta.validation.ConstraintViolationException e) {
+        String msg = e.getConstraintViolations().iterator().next().getMessage();
+        return R.fail(400, msg != null ? msg : "参数校验失败");
+    }
+
     @ExceptionHandler(Exception.class)
     public R<?> handleException(Exception e) {
         e.printStackTrace();
