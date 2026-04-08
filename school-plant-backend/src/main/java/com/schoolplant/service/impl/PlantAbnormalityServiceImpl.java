@@ -362,24 +362,39 @@ public class PlantAbnormalityServiceImpl extends ServiceImpl<PlantAbnormalityMap
     @Transactional(rollbackFor = Exception.class)
     public void checkOverdueAbnormalities() {
         int timeoutHours = parameterService.getInt("ABNORMALITY_TIMEOUT_HOURS", 48);
-        LocalDateTime deadline = LocalDateTime.now().minusHours(timeoutHours);
         
-        List<PlantAbnormality> overdueList = this.list(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PlantAbnormality>()
-                .eq(PlantAbnormality::getStatus, "ASSIGNED")
-                .le(PlantAbnormality::getAssignedAt, deadline)
-                .eq(PlantAbnormality::getOvertimeAlertSent, 0));
+        List<PlantAbnormality> assignedList = this.list(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PlantAbnormality>()
+                .eq(PlantAbnormality::getStatus, "ASSIGNED"));
 
-        for (PlantAbnormality record : overdueList) {
-            // Trigger Admin Alert (Log or WebSocket to specific admin channel if exists)
-            // Here we simply log and maybe notify the maintainer again
-            System.err.println("【逾期提醒】异常工单ID: " + record.getId() + " 已超过" + timeoutHours + "小时未处理！养护员ID: " + record.getMaintainerId());
-            
-            // Notify Maintainer again
-            AbnormalityWebSocket.sendMessage(record.getMaintainerId(), "【紧急】您的工单ID: " + record.getId() + " 已逾期" + timeoutHours + "小时，请尽快处理！");
+        for (PlantAbnormality record : assignedList) {
+            long hoursSinceAssigned = java.time.Duration.between(record.getAssignedAt(), LocalDateTime.now()).toHours();
+            if (hoursSinceAssigned >= timeoutHours) {
+                int expectedAlerts = (int) (hoursSinceAssigned / timeoutHours);
+                
+                if (record.getOvertimeAlertSent() == null) {
+                    record.setOvertimeAlertSent(0);
+                }
 
-            // Mark as alerted
-            record.setOvertimeAlertSent(1);
-            updateById(record);
+                if (record.getOvertimeAlertSent() < expectedAlerts) {
+                    int currentAlertCount = record.getOvertimeAlertSent() + 1;
+                    
+                    if (currentAlertCount >= 3) {
+                        // 超过二次催办仍未处理，升级通知管理员介入
+                        System.err.println("【逾期升级】异常工单ID: " + record.getId() + " 已多次催办未果，升级通知管理员介入！");
+                        List<User> admins = userService.getUsersByRole("ADMIN");
+                        for (User admin : admins) {
+                            AbnormalityWebSocket.sendMessage(admin.getId(), "【工单升级警告】工单ID: " + record.getId() + " 养护员处理超时严重，请管理员介入！");
+                        }
+                    } else {
+                        // 普通催办通知
+                        System.err.println("【逾期提醒】异常工单ID: " + record.getId() + " 第 " + currentAlertCount + " 次催办。");
+                        AbnormalityWebSocket.sendMessage(record.getMaintainerId(), "【紧急】您的工单ID: " + record.getId() + " 已逾期，请尽快处理！（第" + currentAlertCount + "次提醒）");
+                    }
+                    
+                    record.setOvertimeAlertSent(currentAlertCount);
+                    updateById(record);
+                }
+            }
         }
     }
 

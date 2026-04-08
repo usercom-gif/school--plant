@@ -411,7 +411,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, computed } from "vue";
+import { ref, reactive, onMounted, onUnmounted, computed, watch } from "vue";
 import { message, Modal } from "ant-design-vue";
 import {
   PlusOutlined,
@@ -633,13 +633,46 @@ const handlePageChange = () => {
   fetchPosts();
 };
 
+const DRAFT_KEY = "knowledge_post_draft";
+
 const openCreateModal = () => {
   formMode.value = "create";
-  formState.title = "";
-  formState.content = "";
-  formState.tag = undefined;
+  
+  const draftStr = localStorage.getItem(DRAFT_KEY);
+  if (draftStr) {
+    try {
+      const draft = JSON.parse(draftStr);
+      formState.title = draft.title || "";
+      formState.content = draft.content || "";
+      formState.tag = draft.tag || undefined;
+      message.info("已恢复上次未发布的草稿");
+    } catch (e) {
+      formState.title = "";
+      formState.content = "";
+      formState.tag = undefined;
+    }
+  } else {
+    formState.title = "";
+    formState.content = "";
+    formState.tag = undefined;
+  }
+  
   formVisible.value = true;
 };
+
+watch(
+  formState,
+  (newVal) => {
+    if (formMode.value === "create" && formVisible.value) {
+      if (newVal.title || newVal.content) {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(newVal));
+      } else {
+        localStorage.removeItem(DRAFT_KEY);
+      }
+    }
+  },
+  { deep: true }
+);
 
 const handleFormSubmit = async () => {
   if (!formState.title || !formState.content) {
@@ -649,13 +682,19 @@ const handleFormSubmit = async () => {
 
   submitting.value = true;
   try {
-    await createPost(formState);
-    message.success("发布成功");
+    if (formMode.value === "create") {
+      await createPost(formState as KnowledgePostAddRequest);
+      message.success("发布成功");
+      localStorage.removeItem(DRAFT_KEY);
+    } else {
+      await updatePost(formState as any);
+      message.success("更新成功");
+    }
     formVisible.value = false;
     fetchPosts();
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
-    message.error("发布失败");
+    message.error(error.response?.data?.msg || "发布失败，内容已暂存草稿箱");
   } finally {
     submitting.value = false;
   }

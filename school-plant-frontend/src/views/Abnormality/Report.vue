@@ -166,7 +166,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, reactive, onMounted, computed } from "vue";
+import { ref, reactive, onMounted, computed, watch } from "vue";
 import { message } from "ant-design-vue";
 import type { UploadChangeParam, UploadFile } from "ant-design-vue";
 import { useRouter } from "vue-router";
@@ -198,8 +198,23 @@ const plantOptions = computed(() => {
   return formState.isArbitrary ? allPlants.value : adoptedPlants.value;
 });
 
+const DRAFT_KEY = "abnormality_report_draft";
+
 // Fetch plants and user profile
 onMounted(async () => {
+  const draftStr = localStorage.getItem(DRAFT_KEY);
+  if (draftStr) {
+    try {
+      const draft = JSON.parse(draftStr);
+      formState.isArbitrary = draft.isArbitrary ?? false;
+      formState.plantId = draft.plantId;
+      formState.location = draft.location || "";
+      formState.type = draft.type;
+      formState.desc = draft.desc || "";
+      message.info("已恢复上次未提交的草稿（图片需重新选择）");
+    } catch (e) {}
+  }
+
   try {
     const [adoptionsRes, userRes, allPlantsRes] = await Promise.all([
       getMyAdoptions({ page: 1, size: 100 }),
@@ -231,6 +246,25 @@ onMounted(async () => {
     console.error(e);
   }
 });
+
+watch(
+  formState,
+  (newVal) => {
+    const draft = {
+      isArbitrary: newVal.isArbitrary,
+      plantId: newVal.plantId,
+      location: newVal.location,
+      type: newVal.type,
+      desc: newVal.desc,
+    };
+    if (draft.desc || draft.location || draft.type) {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } else {
+      localStorage.removeItem(DRAFT_KEY);
+    }
+  },
+  { deep: true }
+);
 
 const imageFileList = ref<UploadFile[]>([]);
 
@@ -277,8 +311,10 @@ const handleSubmit = async () => {
     // API returns AI analysis string directly
     aiAnalysisResult.value = res || "暂无AI建议";
     resultModalVisible.value = true;
-  } catch (error) {
+    localStorage.removeItem(DRAFT_KEY);
+  } catch (error: any) {
     console.error(error);
+    message.error(error.response?.data?.msg || "提交失败，文本内容已自动保存为草稿");
   } finally {
     loading.value = false;
   }

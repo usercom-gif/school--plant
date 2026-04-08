@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -111,9 +112,23 @@ public class KnowledgePostServiceImpl extends ServiceImpl<KnowledgePostMapper, K
         return vo;
     }
 
+    private static final List<String> SENSITIVE_WORDS = Arrays.asList("暴力", "色情", "赌博", "违禁", "代考");
+
+    private void checkSensitiveWords(String text) {
+        if (!StringUtils.hasText(text)) return;
+        for (String word : SENSITIVE_WORDS) {
+            if (text.contains(word)) {
+                throw new RuntimeException("检测到违规信息或敏感词，请修改后重新发布。");
+            }
+        }
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void addPost(KnowledgePostAddRequest request) {
+        checkSensitiveWords(request.getTitle());
+        checkSensitiveWords(request.getContent());
+        
         KnowledgePost post = new KnowledgePost();
         BeanUtils.copyProperties(request, post);
         post.setAuthorId(StpUtil.getLoginIdAsLong());
@@ -126,6 +141,9 @@ public class KnowledgePostServiceImpl extends ServiceImpl<KnowledgePostMapper, K
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updatePost(KnowledgePostUpdateRequest request) {
+        checkSensitiveWords(request.getTitle());
+        checkSensitiveWords(request.getContent());
+        
         KnowledgePost post = this.getById(request.getId());
         if (post == null) {
             throw new RuntimeException("帖子不存在");
