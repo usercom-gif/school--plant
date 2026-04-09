@@ -120,8 +120,8 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
         // Check outstanding
         int thresholdVal = parameterService.getInt("ACHIEVEMENT_SCORE_THRESHOLD", 90);
         if (compositeScore.compareTo(new BigDecimal(thresholdVal)) >= 0) {
-            achievement.setIsOutstanding(1);
-            achievement.setCertificateUrl("/api/achievement/certificate/" + userId + "/" + currentCycle);
+            achievement.setIsOutstanding(2); // 2: 待人工审核 (Pending Manual Audit)
+            achievement.setCertificateUrl(null); // 审核通过前不生成证书
         } else {
             achievement.setIsOutstanding(0);
             achievement.setCertificateUrl(null);
@@ -223,8 +223,8 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
             BigDecimal threshold = new BigDecimal(thresholdVal);
             
             if (compositeScore.compareTo(threshold) >= 0) {
-                achievement.setIsOutstanding(1);
-                achievement.setCertificateUrl("/api/achievement/certificate/" + user.getId() + "/" + adoptionCycle);
+                achievement.setIsOutstanding(2); // 2: 待人工审核
+                achievement.setCertificateUrl(null);
             } else {
                 achievement.setIsOutstanding(0);
                 achievement.setCertificateUrl(null);
@@ -242,6 +242,25 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
         // We could limit the number of outstanding users here.
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void auditAchievement(Long id, boolean isPass) {
+        Achievement achievement = this.getById(id);
+        if (achievement == null) {
+            throw new RuntimeException("成果记录不存在");
+        }
+        
+        // 只有在待人工审核状态下才能审核
+        if (achievement.getIsOutstanding() != null && achievement.getIsOutstanding() == 2) {
+            if (isPass) {
+                achievement.setIsOutstanding(1); // 1: 优秀
+                achievement.setCertificateUrl("/api/achievement/certificate/" + achievement.getUserId() + "/" + achievement.getAdoptionCycle());
+            } else {
+                achievement.setIsOutstanding(0); // 0: 不符合
+            }
+            this.updateById(achievement);
+        }
+    }
     @Override
     public Achievement getMyAchievement(String adoptionCycle, Long userId) {
         return this.getOne(new LambdaQueryWrapper<Achievement>()

@@ -32,6 +32,12 @@ export const getStats = (adoptionCycle: string) => {
   return request.get<any>("/achievement/stats", { params: { adoptionCycle } });
 };
 
+export const auditAchievement = (id: number, isPass: boolean) => {
+  return request.post<any>("/achievement/audit", null, {
+    params: { id, isPass },
+  });
+};
+
 export const generateReport = (adoptionCycle: string) => {
   return request.post("/achievement/generate", null, {
     params: { adoptionCycle },

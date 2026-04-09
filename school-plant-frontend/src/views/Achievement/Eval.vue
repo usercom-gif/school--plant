@@ -41,7 +41,12 @@
     </div>
 
     <!-- Outstanding List -->
-    <a-card title="优秀养护人公示榜" class="shadow-sm rounded-xl border-none">
+    <a-card title="成果名单" class="shadow-sm rounded-xl border-none">
+      <a-tabs v-model:activeKey="activeTab" @change="fetchData">
+        <a-tab-pane key="outstanding" tab="优秀养护人榜单"></a-tab-pane>
+        <a-tab-pane key="pending" tab="待人工审核 (达标名单)"></a-tab-pane>
+      </a-tabs>
+
       <!-- Mobile List View -->
       <div class="md:hidden">
         <div
@@ -83,7 +88,8 @@
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'isOutstanding'">
-            <a-tag color="gold" v-if="record.isOutstanding">优秀养护人</a-tag>
+            <a-tag color="gold" v-if="record.isOutstanding === 1">优秀养护人</a-tag>
+            <a-tag color="blue" v-else-if="record.isOutstanding === 2">待人工复核</a-tag>
             <span v-else>-</span>
           </template>
           <template v-if="column.key === 'userName'">
@@ -96,6 +102,13 @@
               record.compositeScore
             }}</span>
           </template>
+          <template v-if="column.key === 'action'">
+            <a-space v-if="record.isOutstanding === 2">
+              <a @click="handleAudit(record, true)" class="text-green-600">通过为优秀</a>
+              <a @click="handleAudit(record, false)" class="text-red-600">驳回</a>
+            </a-space>
+            <span v-else class="text-gray-400">已处理</span>
+          </template>
         </template>
       </a-table>
     </a-card>
@@ -103,11 +116,12 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, nextTick } from "vue";
+import { ref, onMounted, nextTick, computed } from "vue";
 import {
   getOutstandingList,
   generateReport,
   getStats,
+  auditAchievement,
   type AchievementVO,
 } from "@/api/achievement";
 import { message } from "ant-design-vue";
@@ -131,6 +145,7 @@ const currentMonth = new Date().getMonth() + 1;
 const defaultCycle =
   currentMonth <= 6 ? `${currentYear}-Cycle1` : `${currentYear}-Cycle2`;
 
+const activeTab = ref("outstanding");
 const adoptionCycle = ref(defaultCycle);
 const loading = ref(false);
 const generating = ref(false);
@@ -139,35 +154,44 @@ const stats = ref<any>({});
 const pieChartRef = ref<HTMLElement | null>(null);
 let chartInstance: echarts.ECharts | null = null;
 
-const columns = [
-  { title: "用户", dataIndex: "userRealName", key: "userName" },
-  { title: "学号/职工号", dataIndex: "studentId", key: "studentId" },
-  {
-    title: "综合评分",
-    dataIndex: "compositeScore",
-    key: "compositeScore",
-    sorter: (a: any, b: any) => a.compositeScore - b.compositeScore,
-  },
-  {
-    title: "任务完成率",
-    dataIndex: "taskCompletionRate",
-    key: "taskCompletionRate",
-    customRender: ({ text }: any) => text + "%",
-  },
-  {
-    title: "认养时长(天)",
-    dataIndex: "adoptionDurationDays",
-    key: "adoptionDurationDays",
-  },
-  { title: "健康分", dataIndex: "plantHealthScore", key: "plantHealthScore" },
-  { title: "荣誉称号", key: "isOutstanding", width: 150 },
-];
+const columns = computed(() => {
+  const baseColumns = [
+    { title: "用户", dataIndex: "userRealName", key: "userName" },
+    { title: "学号/职工号", dataIndex: "studentId", key: "studentId" },
+    {
+      title: "综合评分",
+      dataIndex: "compositeScore",
+      key: "compositeScore",
+      sorter: (a: any, b: any) => a.compositeScore - b.compositeScore,
+    },
+    {
+      title: "任务完成率",
+      dataIndex: "taskCompletionRate",
+      key: "taskCompletionRate",
+      customRender: ({ text }: any) => text + "%",
+    },
+    {
+      title: "认养时长(天)",
+      dataIndex: "adoptionDurationDays",
+      key: "adoptionDurationDays",
+    },
+    { title: "健康分", dataIndex: "plantHealthScore", key: "plantHealthScore" },
+    { title: "状态", key: "isOutstanding", width: 120 },
+  ];
+
+  if (activeTab.value === "pending") {
+    baseColumns.push({ title: "操作", key: "action", width: 150 } as any);
+  }
+
+  return baseColumns;
+});
 
 const fetchData = async () => {
   loading.value = true;
   try {
+    const isOutstandingStatus = activeTab.value === "outstanding" ? 1 : 2;
     const [listRes, statsRes] = await Promise.all([
-      getOutstandingList({ adoptionCycle: adoptionCycle.value, size: 100 }),
+      getOutstandingList({ adoptionCycle: adoptionCycle.value, size: 100, isOutstanding: isOutstandingStatus }),
       getStats(adoptionCycle.value),
     ]);
 
@@ -181,6 +205,16 @@ const fetchData = async () => {
     console.error(error);
   } finally {
     loading.value = false;
+  }
+};
+
+const handleAudit = async (record: any, isPass: boolean) => {
+  try {
+    await auditAchievement(record.id, isPass);
+    message.success("审核操作成功");
+    fetchData();
+  } catch (error: any) {
+    message.error(error.message || "操作失败");
   }
 };
 

@@ -34,16 +34,17 @@ public class AchievementController {
         return R.ok(achievement);
     }
     
-    // 优秀榜单 (公开)
+    // 优秀榜单 (公开) / 待审核榜单 (管理员)
     @GetMapping("/outstanding")
     public R<Page<Achievement>> outstanding(@RequestParam(defaultValue = "1") int page,
                                             @RequestParam(defaultValue = "10") int size,
-                                            @RequestParam String adoptionCycle) {
+                                            @RequestParam String adoptionCycle,
+                                            @RequestParam(defaultValue = "1") Integer isOutstanding) {
         Page<Achievement> pageParam = new Page<>(page, size);
         return R.ok(achievementService.page(pageParam, 
             new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<Achievement>()
                 .eq("adoption_cycle", adoptionCycle)
-                .eq("is_outstanding", 1)
+                .eq("is_outstanding", isOutstanding)
                 .orderByDesc("task_completion_rate")));
     }
     
@@ -71,6 +72,15 @@ public class AchievementController {
     @PostMapping("/generate")
     public R<Void> generate(@RequestParam String adoptionCycle) {
         achievementService.generateCycleReport(adoptionCycle);
+        return R.ok();
+    }
+
+    // 审核人工复核 (管理员)
+    @SaCheckRole("ADMIN")
+    @Log(module = "ACHIEVEMENT", desc = "人工复核评比", type = "UPDATE", key = "#id")
+    @PostMapping("/audit")
+    public R<Void> audit(@RequestParam Long id, @RequestParam boolean isPass) {
+        achievementService.auditAchievement(id, isPass);
         return R.ok();
     }
 }

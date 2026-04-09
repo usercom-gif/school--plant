@@ -11,4 +11,5 @@ public interface AchievementService extends IService<Achievement> {
     Map<String, Object> getStats(String adoptionCycle);
     byte[] generateCertificate(Long userId, String adoptionCycle);
     void updateUserAchievement(Long userId, Long plantId);
+    void auditAchievement(Long id, boolean isPass);
 }
