@@ -32,6 +32,13 @@ export function markAsRead(id: number) {
   });
 }
 
+export function publishAnnouncement(title: string, content: string) {
+  return request<any, void>({
+    url: "/system/notification/announcement",
+    method: "post",
+    params: { title, content },
+  });
+}
 export function markAllAsRead() {
   return request<any, void>({
     url: "/system/notification/read-all",

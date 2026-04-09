@@ -30,14 +30,19 @@ public class SystemNotificationServiceImpl extends ServiceImpl<SystemNotificatio
     @Override
     public long countUnread(Long userId) {
         return count(new LambdaQueryWrapper<SystemNotification>()
-                .eq(SystemNotification::getUserId, userId)
+                .and(w -> w.eq(SystemNotification::getUserId, userId)
+                           .or()
+                           .eq(SystemNotification::getUserId, 0L))
                 .eq(SystemNotification::getIsRead, 0));
     }
 
     @Override
     public List<SystemNotification> listUserNotifications(Long userId, Integer limit) {
+        // Fetch specific user notifications OR global announcements (user_id = 0)
         LambdaQueryWrapper<SystemNotification> wrapper = new LambdaQueryWrapper<SystemNotification>()
-                .eq(SystemNotification::getUserId, userId)
+                .and(w -> w.eq(SystemNotification::getUserId, userId)
+                           .or()
+                           .eq(SystemNotification::getUserId, 0L))
                 .orderByDesc(SystemNotification::getCreatedAt);
         
         if (limit != null && limit > 0) {
@@ -50,6 +55,9 @@ public class SystemNotificationServiceImpl extends ServiceImpl<SystemNotificatio
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void markAsRead(Long id, Long userId) {
+        // If it's a global announcement (user_id = 0), marking as read is a bit tricky
+        // For simplicity in MVP, we won't mutate user_id 0 to read because it affects everyone.
+        // We just ignore markAsRead for user_id = 0 for now.
         lambdaUpdate()
                 .eq(SystemNotification::getId, id)
                 .eq(SystemNotification::getUserId, userId)

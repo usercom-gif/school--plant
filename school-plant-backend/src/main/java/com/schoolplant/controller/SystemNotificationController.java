@@ -1,6 +1,7 @@
 package com.schoolplant.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
+import cn.dev33.satoken.annotation.SaCheckRole;
 import cn.dev33.satoken.stp.StpUtil;
 import com.schoolplant.common.R;
 import com.schoolplant.entity.SystemNotification;
@@ -51,6 +52,15 @@ public class SystemNotificationController {
     public R<Void> readAll() {
         Long userId = StpUtil.getLoginIdAsLong();
         notificationService.markAllAsRead(userId);
+        return R.ok();
+    }
+
+    @Operation(summary = "发布全站公告 (仅管理员)")
+    @SaCheckRole("ADMIN")
+    @PostMapping("/announcement")
+    public R<Void> publishAnnouncement(@RequestParam String title, @RequestParam String content) {
+        // user_id = 0 represents a global announcement broadcast to all users
+        notificationService.sendNotification(0L, title, content, "ANNOUNCEMENT");
         return R.ok();
     }
 }

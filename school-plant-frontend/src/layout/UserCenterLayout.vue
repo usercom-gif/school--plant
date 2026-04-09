@@ -85,6 +85,17 @@
         />
 
         <div class="flex items-center gap-2 md:gap-4">
+          <!-- Publish Announcement Button (Admin Only) -->
+          <a-button
+            v-if="userRole === 'ADMIN'"
+            type="primary"
+            shape="round"
+            class="hidden md:inline-flex bg-gradient-to-r from-blue-500 to-indigo-600 border-none hover:shadow-md transition-all"
+            @click="announcementVisible = true"
+          >
+            发布系统公告
+          </a-button>
+
           <!-- Notification Bell -->
           <a-popover
             v-model:open="notificationVisible"
@@ -234,6 +245,30 @@
         </div>
       </div>
     </a-modal>
+    <!-- Publish Announcement Modal -->
+    <a-modal
+      v-model:open="announcementVisible"
+      title="发布系统全局公告"
+      :confirmLoading="publishingAnnouncement"
+      @ok="handlePublishAnnouncement"
+      @cancel="announcementVisible = false"
+    >
+      <div class="py-4">
+        <div class="mb-4">
+          <div class="mb-2 text-gray-700">公告标题：</div>
+          <a-input v-model:value="announcementTitle" placeholder="请输入公告标题（例如：关于春季认养活动的通知）" />
+        </div>
+        <div>
+          <div class="mb-2 text-gray-700">公告内容：</div>
+          <a-textarea
+            v-model:value="announcementContent"
+            placeholder="请输入公告正文..."
+            :rows="6"
+          />
+        </div>
+      </div>
+    </a-modal>
+
   </a-layout>
 </template>
 
@@ -267,6 +302,7 @@ import {
   getUnreadCount,
   markAllAsRead,
   markAsRead,
+  publishAnnouncement,
   type SystemNotification,
 } from "@/api/notification";
 
@@ -293,6 +329,12 @@ const notificationLoading = ref(false);
 
 const notificationDetailVisible = ref(false);
 const selectedNotification = ref<SystemNotification | null>(null);
+
+// Announcement state
+const announcementVisible = ref(false);
+const publishingAnnouncement = ref(false);
+const announcementTitle = ref("");
+const announcementContent = ref("");
 
 const handleViewNotification = async (item: SystemNotification) => {
   selectedNotification.value = item;
@@ -462,6 +504,28 @@ const handleLogout = () => {
       router.push("/login");
     },
   });
+};
+
+const handlePublishAnnouncement = async () => {
+  if (!announcementTitle.value.trim() || !announcementContent.value.trim()) {
+    message.warning("公告标题和内容不能为空");
+    return;
+  }
+  
+  publishingAnnouncement.value = true;
+  try {
+    await publishAnnouncement(announcementTitle.value, announcementContent.value);
+    message.success("全局公告发布成功，已推送至所有用户");
+    announcementVisible.value = false;
+    announcementTitle.value = "";
+    announcementContent.value = "";
+    // Refresh admin's own list too
+    fetchNotifications();
+  } catch (error: any) {
+    message.error(error.message || "发布公告失败");
+  } finally {
+    publishingAnnouncement.value = false;
+  }
 };
 
 // Polling for updates
