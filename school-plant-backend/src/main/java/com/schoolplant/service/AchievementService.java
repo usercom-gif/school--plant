@@ -12,4 +12,5 @@ public interface AchievementService extends IService<Achievement> {
     byte[] generateCertificate(Long userId, String adoptionCycle);
     void updateUserAchievement(Long userId, Long plantId);
     void auditAchievement(Long id, boolean isPass);
+    void checkOverdueAudits();
 }

@@ -13,6 +13,8 @@ import com.schoolplant.mapper.CareTaskMapper;
 import com.schoolplant.mapper.PlantAbnormalityMapper;
 import com.schoolplant.mapper.UserMapper;
 import com.schoolplant.service.AchievementService;
+import com.schoolplant.service.UserService;
+import com.schoolplant.websocket.AbnormalityWebSocket;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
@@ -43,6 +47,9 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
 
     @Autowired
     private com.schoolplant.service.SystemParameterService parameterService;
+
+    @Autowired
+    private UserService userService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -117,23 +124,38 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
         achievement.setPlantHealthScore(healthScore);
         achievement.setCompositeScore(compositeScore);
         
-        // Check outstanding
-        int thresholdVal = parameterService.getInt("ACHIEVEMENT_SCORE_THRESHOLD", 90);
-        if (compositeScore.compareTo(new BigDecimal(thresholdVal)) >= 0) {
-            achievement.setIsOutstanding(2); // 2: 待人工审核 (Pending Manual Audit)
-            achievement.setCertificateUrl(null); // 审核通过前不生成证书
-        } else {
-            achievement.setIsOutstanding(0);
-            achievement.setCertificateUrl(null);
-        }
-        
         User user = userMapper.selectById(userId);
         if (user != null) {
             achievement.setUserRealName(user.getRealName());
             achievement.setStudentId(user.getStudentId());
         }
 
-        this.saveOrUpdate(achievement);
+        // 异常1: 数据缺失校验
+        if (total == 0) {
+            achievement.setIsOutstanding(3); // 3: 待补全数据
+            this.saveOrUpdate(achievement);
+            throw new RuntimeException("由于数据缺失而不能进行评价，已将该用户标记为“需要补充数据”");
+        }
+
+        // 异常2: 评分计算校验
+        try {
+            int thresholdVal = parameterService.getInt("ACHIEVEMENT_SCORE_THRESHOLD", 90);
+            if (compositeScore.compareTo(new BigDecimal(thresholdVal)) >= 0) {
+                achievement.setIsOutstanding(2); // 2: 待人工审核 (Pending Manual Audit)
+                achievement.setCertificateUrl(null); // 审核通过前不生成证书
+            } else {
+                achievement.setIsOutstanding(0);
+                achievement.setCertificateUrl(null);
+            }
+            this.saveOrUpdate(achievement);
+        } catch (Exception e) {
+            // 评分计算异常，告警管理员
+            List<User> admins = userService.getUsersByRole("ADMIN");
+            for (User admin : admins) {
+                AbnormalityWebSocket.sendMessage(admin.getId(), "【系统告警】综合评分计算服务异常或规则参数缺失，请检查！");
+            }
+            throw new RuntimeException("评分计算服务异常，已中止本次评比并告警管理员，待修复后重新计算。");
+        }
     }
 
     @Override
@@ -217,29 +239,68 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
             achievement.setPlantHealthScore(healthScore);
             achievement.setCompositeScore(compositeScore);
             
-            // Outstanding Candidates: Composite Score >= 90
-            // 优秀养护人：综合评分 >= 90
-            int thresholdVal = parameterService.getInt("ACHIEVEMENT_SCORE_THRESHOLD", 90);
-            BigDecimal threshold = new BigDecimal(thresholdVal);
-            
-            if (compositeScore.compareTo(threshold) >= 0) {
-                achievement.setIsOutstanding(2); // 2: 待人工审核
-                achievement.setCertificateUrl(null);
-            } else {
-                achievement.setIsOutstanding(0);
-                achievement.setCertificateUrl(null);
-            }
-            
             // Set user name and student ID for display
             achievement.setUserRealName(user.getRealName());
             achievement.setStudentId(user.getStudentId());
 
-            this.saveOrUpdate(achievement);
+            // 异常1: 数据缺失校验
+            if (total == 0) {
+                achievement.setIsOutstanding(3); // 3: 待补全数据
+                this.saveOrUpdate(achievement);
+                continue; // 记录后跳过评分
+            }
+
+            // 异常2: 评分计算校验
+            try {
+                int thresholdVal = parameterService.getInt("ACHIEVEMENT_SCORE_THRESHOLD", 90);
+                BigDecimal threshold = new BigDecimal(thresholdVal);
+                
+                if (compositeScore.compareTo(threshold) >= 0) {
+                    achievement.setIsOutstanding(2); // 2: 待人工审核
+                    achievement.setCertificateUrl(null);
+                } else {
+                    achievement.setIsOutstanding(0);
+                    achievement.setCertificateUrl(null);
+                }
+                
+                this.saveOrUpdate(achievement);
+            } catch (Exception e) {
+                // 评分计算异常，告警管理员
+                List<User> admins = userService.getUsersByRole("ADMIN");
+                for (User admin : admins) {
+                    AbnormalityWebSocket.sendMessage(admin.getId(), "【系统告警】综合评分计算服务异常或规则参数缺失，请检查！");
+                }
+                throw new RuntimeException("评分计算服务异常，已中止本次评比并告警管理员，待修复后重新计算。");
+            }
         }
 
         // Finalize Outstanding: If multiple 100% candidates, they are already marked. 
         // Requirements say "sort by duration to select outstanding". 
         // We could limit the number of outstanding users here.
+    }
+
+    @Override
+    public void checkOverdueAudits() {
+        // 异常3: 管理员审核异常（超时提醒）
+        List<Achievement> pendingList = this.list(new LambdaQueryWrapper<Achievement>()
+                .eq(Achievement::getIsOutstanding, 2));
+        
+        if (pendingList.isEmpty()) return;
+        
+        List<User> admins = userService.getUsersByRole("ADMIN");
+        if (admins.isEmpty()) return;
+
+        for (Achievement a : pendingList) {
+            if (a.getUpdatedAt() != null) {
+                long hours = java.time.Duration.between(a.getUpdatedAt(), LocalDateTime.now()).toHours();
+                if (hours >= 24) { // 超过24小时未审核
+                    for (User admin : admins) {
+                        AbnormalityWebSocket.sendMessage(admin.getId(), 
+                            "【审核超时提醒】用户 " + a.getUserRealName() + " (" + a.getStudentId() + ") 的成果评价处于待审核状态已超过24小时，请尽快处理！");
+                    }
+                }
+            }
+        }
     }
 
     @Override
@@ -329,7 +390,7 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
                 .eq(Achievement::getUserId, userId)
                 .eq(Achievement::getAdoptionCycle, adoptionCycle));
                 
-        if (achievement == null || achievement.getIsOutstanding() != 1) {
+        if (achievement == null || achievement.getIsOutstanding() == null || achievement.getIsOutstanding() != 1) {
             throw new RuntimeException("该用户不符合荣誉证书领取资格");
         }
         
@@ -455,8 +516,8 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
             javax.imageio.ImageIO.write(image, "png", baos);
             return baos.toByteArray();
         } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("荣誉证书生成失败");
+            System.err.println("证书生成/下载异常: " + e.getMessage());
+            throw new RuntimeException("目前的操作已被取消，请重新操作。如持续失败请联系人工辅助处理后再试一次。");
         }
     }
 }

@@ -136,11 +136,41 @@ const fetchData = async () => {
   }
 };
 
-const downloadCertificate = () => {
-  if (achievement.value?.certificateUrl) {
-    window.open(achievement.value.certificateUrl, "_blank");
-  } else {
+const downloadCertificate = async () => {
+  if (!achievement.value?.certificateUrl) {
     message.warning("证书生成中，请稍后再试");
+    return;
+  }
+  
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch(achievement.value.certificateUrl, {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : "",
+      },
+    });
+    
+    // 如果返回的是 JSON，说明后端抛出了异常（如：不符合资格、生成失败）
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      const data = await res.json();
+      message.error(data.msg || "目前的操作已被取消，请重新操作");
+      return;
+    }
+    
+    // 正常下载 Blob 文件
+    const blob = await res.blob();
+    const url = window.URL.createUrl(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `荣誉证书-${achievement.value.adoptionCycle}.png`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (error) {
+    console.error("下载证书异常:", error);
+    message.error("目前的操作已被取消，请重新操作。如持续失败请联系人工客服协助排查。");
   }
 };
 

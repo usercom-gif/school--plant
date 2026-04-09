@@ -57,13 +57,19 @@ public class AchievementController {
     
     // 证书下载
     @GetMapping("/certificate/{userId}/{adoptionCycle}")
-    public org.springframework.http.ResponseEntity<byte[]> certificate(@PathVariable Long userId, @PathVariable String adoptionCycle) {
-        byte[] bytes = achievementService.generateCertificate(userId, adoptionCycle);
-        String fileName = "certificate-" + userId + "-" + adoptionCycle.replaceAll("[^A-Za-z0-9]", "") + ".png";
-        return org.springframework.http.ResponseEntity.ok()
-                .header("Content-Type", "image/png")
-                .header("Content-Disposition", "attachment; filename=\"" + fileName + "\"")
-                .body(bytes);
+    public org.springframework.http.ResponseEntity<?> certificate(@PathVariable Long userId, @PathVariable String adoptionCycle) {
+        try {
+            byte[] bytes = achievementService.generateCertificate(userId, adoptionCycle);
+            String fileName = "certificate-" + userId + "-" + adoptionCycle.replaceAll("[^A-Za-z0-9]", "") + ".png";
+            return org.springframework.http.ResponseEntity.ok()
+                    .header("Content-Type", "image/png")
+                    .header("Content-Disposition", "attachment; filename=\"" + fileName + "\"")
+                    .body(bytes);
+        } catch (Exception e) {
+            return org.springframework.http.ResponseEntity.status(400)
+                    .header("Content-Type", "application/json;charset=UTF-8")
+                    .body("{\"code\":400, \"msg\":\"" + e.getMessage() + "\"}");
+        }
     }
     
     // 手动触发生成 (管理员)
