@@ -26,6 +26,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import com.schoolplant.common.SensitiveWordUtils;
 import java.util.stream.Collectors;
 
 @Service
@@ -112,14 +113,10 @@ public class KnowledgePostServiceImpl extends ServiceImpl<KnowledgePostMapper, K
         return vo;
     }
 
-    private static final List<String> SENSITIVE_WORDS = Arrays.asList("暴力", "色情", "赌博", "违禁", "代考");
-
     private void checkSensitiveWords(String text) {
-        if (!StringUtils.hasText(text)) return;
-        for (String word : SENSITIVE_WORDS) {
-            if (text.contains(word)) {
-                throw new RuntimeException("检测到违规信息或敏感词，请修改后重新发布。");
-            }
+        String sensitiveWord = SensitiveWordUtils.getFirstSensitiveWord(text);
+        if (sensitiveWord != null) {
+            throw new RuntimeException("系统检测到违规词汇 [" + sensitiveWord + "]，请修改后重新发布。");
         }
     }
 
