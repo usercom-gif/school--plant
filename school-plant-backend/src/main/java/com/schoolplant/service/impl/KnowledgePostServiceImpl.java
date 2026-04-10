@@ -16,6 +16,8 @@ import com.schoolplant.mapper.KnowledgePostMapper;
 import com.schoolplant.mapper.PostLikeMapper;
 import com.schoolplant.mapper.UserMapper;
 import com.schoolplant.service.KnowledgePostService;
+import com.schoolplant.service.UserService;
+import com.schoolplant.websocket.AbnormalityWebSocket;
 import com.schoolplant.vo.KnowledgePostVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +42,9 @@ public class KnowledgePostServiceImpl extends ServiceImpl<KnowledgePostMapper, K
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private UserService userService;
 
     @Override
     public Page<KnowledgePostVO> getPostList(KnowledgePostQueryRequest request) {
@@ -233,9 +238,43 @@ public class KnowledgePostServiceImpl extends ServiceImpl<KnowledgePostMapper, K
     }
 
     @Override
+    public void checkOverduePosts() {
+        // Find posts that have been PENDING for more than 24 hours
+        List<KnowledgePost> pendingPosts = this.list(new LambdaQueryWrapper<KnowledgePost>()
+                .eq(KnowledgePost::getStatus, "PENDING"));
+
+        if (pendingPosts.isEmpty()) return;
+
+        List<User> admins = userService.getUsersByRole("ADMIN");
+        if (admins.isEmpty()) return;
+
+        for (KnowledgePost post : pendingPosts) {
+            if (post.getUpdatedAt() != null) {
+                long hours = java.time.Duration.between(post.getUpdatedAt(), LocalDateTime.now()).toHours();
+                if (hours >= 24) {
+                    for (User admin : admins) {
+                        AbnormalityWebSocket.sendMessage(admin.getId(), 
+                            "【知识分享审核提醒】帖子《" + post.getTitle() + "》已等待审核超过 24 小时，请尽快处理！");
+                    }
+                }
+            } else if (post.getCreatedAt() != null) {
+                long hours = java.time.Duration.between(post.getCreatedAt(), LocalDateTime.now()).toHours();
+                if (hours >= 24) {
+                    for (User admin : admins) {
+                        AbnormalityWebSocket.sendMessage(admin.getId(), 
+                            "【知识分享审核提醒】帖子《" + post.getTitle() + "》已等待审核超过 24 小时，请尽快处理！");
+                    }
+                }
+            }
+        }
+    }
+
+    @Override
     public void toggleFeature(Long id, boolean isFeatured) {
         KnowledgePost post = this.getById(id);
-        if (post == null) return;
+        if (post == null) {
+            throw new RuntimeException("帖子不存在");
+        }
         post.setIsFeatured(isFeatured ? 1 : 0);
         this.updateById(post);
     }

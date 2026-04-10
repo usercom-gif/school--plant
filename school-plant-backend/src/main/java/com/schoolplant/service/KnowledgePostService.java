@@ -20,4 +20,5 @@ public interface KnowledgePostService extends IService<KnowledgePost> {
     void toggleLike(Long id);
     void reportPost(Long id, String reason);
     void toggleFeature(Long id, boolean isFeatured);
+    void checkOverduePosts();
 }
