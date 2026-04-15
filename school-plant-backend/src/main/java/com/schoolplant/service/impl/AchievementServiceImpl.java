@@ -137,6 +137,14 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
             throw new RuntimeException("由于数据缺失而不能进行评价，已将该用户标记为“需要补充数据”");
         }
 
+        // 任务完成率未达 100% 的拦截逻辑
+        if (taskRate.compareTo(new BigDecimal("100")) < 0) {
+            achievement.setIsOutstanding(0);
+            achievement.setCertificateUrl(null);
+            this.saveOrUpdate(achievement);
+            return; // 终止后续评分和评优判断
+        }
+
         // 异常2: 评分计算校验
         try {
             int thresholdVal = parameterService.getInt("ACHIEVEMENT_SCORE_THRESHOLD", 90);
@@ -248,6 +256,14 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
                 achievement.setIsOutstanding(3); // 3: 待补全数据
                 this.saveOrUpdate(achievement);
                 continue; // 记录后跳过评分
+            }
+
+            // 任务完成率未达 100% 的拦截逻辑
+            if (taskRate.compareTo(new BigDecimal("100")) < 0) {
+                achievement.setIsOutstanding(0);
+                achievement.setCertificateUrl(null);
+                this.saveOrUpdate(achievement);
+                continue; // 终止该用户的后续评分判断
             }
 
             // 异常2: 评分计算校验
