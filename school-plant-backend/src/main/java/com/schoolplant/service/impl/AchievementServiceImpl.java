@@ -23,9 +23,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -50,6 +48,16 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
 
     @Autowired
     private UserService userService;
+
+    private int calculateAdoptionDurationDays(LocalDate startDate, LocalDate endDate) {
+        if (startDate == null) {
+            return 0;
+        }
+        LocalDate actualEndDate = endDate != null ? endDate : LocalDate.now();
+        // 按自然日计算，提交成果当天也计入认养时长
+        long days = ChronoUnit.DAYS.between(startDate, actualEndDate) + 1;
+        return (int) Math.max(days, 0);
+    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -115,8 +123,10 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
             achievement.setUserId(userId);
             achievement.setPlantId(plantId);
             achievement.setAdoptionCycle(currentCycle);
-            achievement.setAdoptionStartDate(record.getStartDate());
         }
+        achievement.setAdoptionStartDate(record.getStartDate());
+        achievement.setAdoptionEndDate(record.getEndDate());
+        achievement.setAdoptionDurationDays(calculateAdoptionDurationDays(record.getStartDate(), record.getEndDate()));
 
         achievement.setTotalTasks(total.intValue());
         achievement.setCompletedTasks(completed.intValue());
@@ -128,6 +138,12 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
         if (user != null) {
             achievement.setUserRealName(user.getRealName());
             achievement.setStudentId(user.getStudentId());
+        }
+
+        // 人工复审通过后，允许继续更新统计字段，但不再覆盖最终评比状态
+        if (achievement.getIsOutstanding() != null && achievement.getIsOutstanding() == 1) {
+            this.saveOrUpdate(achievement);
+            return;
         }
 
         // 异常1: 数据缺失校验
@@ -195,14 +211,8 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
 
             // 5. Calculate adoption duration
             List<AdoptionRecord> records = adoptionRecordMapper.selectList(new LambdaQueryWrapper<AdoptionRecord>()
-                    .eq(AdoptionRecord::getUserId, user.getId()));
-            
-            long durationDays = 0;
-            for (AdoptionRecord record : records) {
-                if (record.getStartDate() != null && record.getEndDate() != null) {
-                    durationDays += ChronoUnit.DAYS.between(record.getStartDate(), record.getEndDate());
-                }
-            }
+                    .eq(AdoptionRecord::getUserId, user.getId())
+                    .orderByDesc(AdoptionRecord::getCreatedAt));
 
             // 6. Calculate health score (30%)
             // Basic logic: Start with 100, deduct for abnormalities
@@ -232,24 +242,33 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
                 achievement.setAdoptionCycle(adoptionCycle);
             }
 
-            // Try to find plant ID from records
-            if (!records.isEmpty()) {
-                achievement.setPlantId(records.get(0).getPlantId());
-                achievement.setAdoptionStartDate(records.get(0).getStartDate());
-            } else {
+            // 以当前用户最近的一条认养记录作为本周期成果评比的认养依据
+            if (records.isEmpty()) {
                 continue;
             }
+            AdoptionRecord latestRecord = records.get(0);
+            achievement.setPlantId(latestRecord.getPlantId());
+            achievement.setAdoptionStartDate(latestRecord.getStartDate());
+            achievement.setAdoptionEndDate(latestRecord.getEndDate());
+            achievement.setAdoptionDurationDays(
+                    calculateAdoptionDurationDays(latestRecord.getStartDate(), latestRecord.getEndDate())
+            );
             
             achievement.setTotalTasks(total.intValue());
             achievement.setCompletedTasks(completed.intValue());
             achievement.setTaskCompletionRate(taskRate);
-            achievement.setAdoptionDurationDays((int)durationDays);
             achievement.setPlantHealthScore(healthScore);
             achievement.setCompositeScore(compositeScore);
             
             // Set user name and student ID for display
             achievement.setUserRealName(user.getRealName());
             achievement.setStudentId(user.getStudentId());
+
+            // 人工复审通过后，允许继续更新统计字段，但不再覆盖最终评比状态
+            if (achievement.getIsOutstanding() != null && achievement.getIsOutstanding() == 1) {
+                this.saveOrUpdate(achievement);
+                continue;
+            }
 
             // 异常1: 数据缺失校验
             if (total == 0) {

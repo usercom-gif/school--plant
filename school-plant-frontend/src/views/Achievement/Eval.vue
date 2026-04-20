@@ -116,7 +116,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, nextTick, computed } from "vue";
+import { ref, onMounted, nextTick, computed, watch } from "vue";
 import {
   getOutstandingList,
   generateReport,
@@ -145,8 +145,15 @@ const currentMonth = new Date().getMonth() + 1;
 const defaultCycle =
   currentMonth <= 6 ? `${currentYear}-Cycle1` : `${currentYear}-Cycle2`;
 
-const activeTab = ref("outstanding");
-const adoptionCycle = ref(defaultCycle);
+const ACTIVE_TAB_KEY = "achievement_eval_active_tab";
+const ADOPTION_CYCLE_KEY = "achievement_eval_adoption_cycle";
+
+const activeTab = ref(
+  localStorage.getItem(ACTIVE_TAB_KEY) || "outstanding",
+);
+const adoptionCycle = ref(
+  localStorage.getItem(ADOPTION_CYCLE_KEY) || defaultCycle,
+);
 const loading = ref(false);
 const generating = ref(false);
 const dataSource = ref<AchievementVO[]>([]);
@@ -211,7 +218,12 @@ const fetchData = async () => {
 const handleAudit = async (record: any, isPass: boolean) => {
   try {
     await auditAchievement(record.id, isPass);
-    message.success("审核操作成功");
+    if (isPass) {
+      message.success("复审通过，记录已移入优秀榜单");
+      activeTab.value = "outstanding";
+    } else {
+      message.success("已驳回该评比记录");
+    }
     fetchData();
   } catch (error: any) {
     message.error(error.message || "操作失败");
@@ -269,6 +281,14 @@ const handleGenerate = async () => {
     generating.value = false;
   }
 };
+
+watch(activeTab, (value) => {
+  localStorage.setItem(ACTIVE_TAB_KEY, value);
+});
+
+watch(adoptionCycle, (value) => {
+  localStorage.setItem(ADOPTION_CYCLE_KEY, value);
+});
 
 onMounted(() => {
   fetchData();
