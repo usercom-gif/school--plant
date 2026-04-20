@@ -110,15 +110,18 @@ public class CareTaskServiceImpl extends ServiceImpl<CareTaskMapper, CareTask> i
             throw new RuntimeException("任务不存在");
         }
         
-        // 1. Get clock-in time window from system params (Default: 12:50 - 13:10)
-        String startTimeStr = parameterService.getValue("CLOCK_IN_START_TIME", "12:50");
-        String endTimeStr = parameterService.getValue("CLOCK_IN_END_TIME", "13:10");
+        // 1. Get clock-in time window from system params (Default: 00:00:00 - 23:59:59)
+        String startTimeStr = parameterService.getValue("CLOCK_IN_START_TIME", "00:00");
+        String endTimeStr = parameterService.getValue("CLOCK_IN_END_TIME", "23:59");
         
         LocalTime nowTime = LocalTime.now();
         LocalTime start = LocalTime.parse(startTimeStr);
         LocalTime end = LocalTime.parse(endTimeStr);
         
-        if (nowTime.isBefore(start) || nowTime.isAfter(end)) {
+        // 当配置为全天时，不进行严格的拦截，或者进行包容性判断
+        // 注意：23:59:59 可能会被 parse 为 23:59，这里直接用 23:59 作为基准，
+        // 实际上如果是 00:00 到 23:59，任何时间都是符合的，只有用户配了非全天才会拦截
+        if (nowTime.isBefore(start) || (nowTime.isAfter(end) && !endTimeStr.equals("23:59"))) {
              throw new RuntimeException("打卡失败：只能在 " + startTimeStr + " - " + endTimeStr + " 之间进行打卡");
         }
         
@@ -135,26 +138,18 @@ public class CareTaskServiceImpl extends ServiceImpl<CareTaskMapper, CareTask> i
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void checkOverdueTasks() {
-        // Requirement: Missed time -> Overdue.
-        // If current time > 13:10, and task is PENDING and due date is TODAY (or before), mark overdue.
-        // This scheduler should run periodically, e.g. every hour or at 13:15.
+        // 当打卡时间修改为全天（00:00-23:59）后，逾期检查应该只针对“昨天及以前”的任务
+        // 所以我们查找所有 dueDate < today 的 pending 任务，将它们标记为逾期
         
-        LocalDateTime now = LocalDateTime.now();
-        // If it's past 13:10 today, mark today's pending tasks as overdue.
-        if (now.toLocalTime().isAfter(LocalTime.of(13, 10))) {
-             List<CareTask> todaysPending = careTaskMapper.selectList(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<CareTask>()
-                 .eq(CareTask::getStatus, "PENDING")
-                 .le(CareTask::getDueDate, LocalDate.now()) // Today or past
-             );
-             
-             for (CareTask task : todaysPending) {
-                 task.setStatus("OVERDUE");
-                 this.updateById(task);
-                 // Optional: Penalty logic
-             }
+        List<CareTask> overdueTasks = careTaskMapper.selectList(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<CareTask>()
+            .eq(CareTask::getStatus, "PENDING")
+            .lt(CareTask::getDueDate, LocalDate.now()) // 严格小于今天
+        );
+        
+        for (CareTask task : overdueTasks) {
+            task.setStatus("OVERDUE");
+            this.updateById(task);
+            // Optional: Penalty logic or notification
         }
-        
-        // Also check past days just in case scheduler missed
-        // (Handled by .le(LocalDate.now()) above)
     }
 }
