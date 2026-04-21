@@ -7,7 +7,7 @@ import com.qcloud.cos.model.*;
 import com.schoolplant.config.TencentCosProperties;
 import com.schoolplant.service.CosStorageService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@ConditionalOnBean(COSClient.class)
+@ConditionalOnProperty(name = "school-plant.storage", havingValue = "cos")
 public class CosStorageServiceImpl implements CosStorageService {
 
     @Autowired
