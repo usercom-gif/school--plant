@@ -413,6 +413,13 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
                 );
             } else {
                 achievement.setIsOutstanding(0); // 0: 不符合
+                achievement.setCertificateUrl(null);
+                notificationService.sendNotification(
+                        achievement.getUserId(),
+                        "优秀养护人评选未入选",
+                        String.format("您提交的 %s 周期成果评比未通过本次优秀养护人审核，暂未入选，请继续加油。", achievement.getAdoptionCycle()),
+                        "SYSTEM"
+                );
             }
             this.updateById(achievement);
         }
