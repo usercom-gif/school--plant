@@ -87,7 +87,7 @@
         <div class="flex items-center gap-2 md:gap-4">
           <!-- Publish Announcement Button (Admin Only) -->
           <a-button
-            v-if="userRole === 'ADMIN'"
+            v-if="user.role === 'ADMIN'"
             type="primary"
             shape="round"
             class="hidden md:inline-flex bg-gradient-to-r from-blue-500 to-indigo-600 border-none hover:shadow-md transition-all"

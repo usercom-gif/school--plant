@@ -160,7 +160,7 @@ const downloadCertificate = async () => {
     
     // 正常下载 Blob 文件
     const blob = await res.blob();
-    const url = window.URL.createUrl(blob);
+    const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `荣誉证书-${achievement.value.adoptionCycle}.png`;

@@ -424,6 +424,7 @@ import {
 import {
   listPosts,
   createPost,
+  updatePost,
   deletePost,
   likePost,
   reportPost,
