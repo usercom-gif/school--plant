@@ -18,6 +18,8 @@ import com.schoolplant.mapper.CareTaskMapper;
 import com.schoolplant.mapper.PlantMapper;
 import com.schoolplant.mapper.UserMapper;
 import com.schoolplant.service.PlantService;
+import com.schoolplant.service.SystemNotificationService;
+import com.schoolplant.service.UserService;
 import com.schoolplant.vo.PlantExcelVO;
 import com.schoolplant.vo.PlantVO;
 import org.springframework.beans.BeanUtils;
@@ -46,6 +48,12 @@ public class PlantServiceImpl extends ServiceImpl<PlantMapper, Plant> implements
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private SystemNotificationService notificationService;
     
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -163,6 +171,17 @@ public class PlantServiceImpl extends ServiceImpl<PlantMapper, Plant> implements
         }
         
         this.save(plant);
+
+        List<User> normalUsers = userService.getUsersByRole("USER");
+        String publisherName = user != null && StringUtils.hasText(user.getRealName()) ? user.getRealName() : "用户";
+        for (User normalUser : normalUsers) {
+            notificationService.sendNotification(
+                    normalUser.getId(),
+                    "新植物已发布",
+                    String.format("用户 %s 新上传了植物《%s》，可前往植物列表查看详情。", publisherName, plant.getName()),
+                    "SYSTEM"
+            );
+        }
     }
 
     @Override

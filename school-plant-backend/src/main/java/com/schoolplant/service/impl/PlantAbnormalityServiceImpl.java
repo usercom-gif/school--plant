@@ -11,6 +11,7 @@ import com.schoolplant.service.CosStorageService;
 import com.schoolplant.service.PlantAbnormalityService;
 import com.schoolplant.service.PlantImageAnalysisService;
 import com.schoolplant.service.SystemParameterService;
+import com.schoolplant.service.SystemNotificationService;
 import com.schoolplant.websocket.AbnormalityWebSocket;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -47,6 +48,9 @@ public class PlantAbnormalityServiceImpl extends ServiceImpl<PlantAbnormalityMap
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private SystemNotificationService notificationService;
 
     @Autowired
     private DifyService difyService;
@@ -348,6 +352,12 @@ public class PlantAbnormalityServiceImpl extends ServiceImpl<PlantAbnormalityMap
         List<User> admins = userService.getUsersByRole("ADMIN");
         for (User admin : admins) {
             AbnormalityWebSocket.sendMessage(admin.getId(), "ABNORMALITY_FAILED_ESCALATION:" + abnormalityId);
+            notificationService.sendNotification(
+                    admin.getId(),
+                    "异常工单处理失败",
+                    String.format("异常工单 #%d 已被标记为处理失败，请尽快介入处理。", abnormalityId),
+                    "SYSTEM"
+            );
         }
     }
 

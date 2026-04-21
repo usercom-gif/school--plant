@@ -13,6 +13,7 @@ import com.schoolplant.mapper.CareTaskMapper;
 import com.schoolplant.mapper.PlantAbnormalityMapper;
 import com.schoolplant.mapper.UserMapper;
 import com.schoolplant.service.AchievementService;
+import com.schoolplant.service.SystemNotificationService;
 import com.schoolplant.service.UserService;
 import com.schoolplant.websocket.AbnormalityWebSocket;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,6 +49,9 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private SystemNotificationService notificationService;
 
     private int calculateAdoptionDurationDays(LocalDate startDate, LocalDate endDate) {
         if (startDate == null) {
@@ -401,6 +405,12 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
             if (isPass) {
                 achievement.setIsOutstanding(1); // 1: 优秀
                 achievement.setCertificateUrl("/api/achievement/certificate/" + achievement.getUserId() + "/" + achievement.getAdoptionCycle());
+                notificationService.sendNotification(
+                        achievement.getUserId(),
+                        "优秀养护人评选通过",
+                        String.format("恭喜您已通过 %s 周期的优秀养护人审核，可前往成果评比页面查看并下载证书。", achievement.getAdoptionCycle()),
+                        "SYSTEM"
+                );
             } else {
                 achievement.setIsOutstanding(0); // 0: 不符合
             }
