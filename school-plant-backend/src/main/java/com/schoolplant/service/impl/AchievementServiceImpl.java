@@ -59,9 +59,31 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
         return (int) Math.max(days, 0);
     }
 
+    private java.awt.Font createCertificateFont(int style, int size) {
+        String[] candidates = new String[] {
+                "PingFang SC",
+                "Microsoft YaHei",
+                "SimHei",
+                "Songti SC",
+                "STHeiti",
+                "Arial Unicode MS",
+                "SansSerif"
+        };
+        String[] available = java.awt.GraphicsEnvironment
+                .getLocalGraphicsEnvironment()
+                .getAvailableFontFamilyNames();
+        java.util.List<String> availableList = java.util.Arrays.asList(available);
+        for (String name : candidates) {
+            if (availableList.contains(name)) {
+                return new java.awt.Font(name, style, size);
+            }
+        }
+        return new java.awt.Font("SansSerif", style, size);
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void updateUserAchievement(Long userId, Long plantId) {
+    public String updateUserAchievement(Long userId, Long plantId) {
         // 1. Find active or recently finished adoption record to determine context
         AdoptionRecord record = adoptionRecordMapper.selectOne(new LambdaQueryWrapper<AdoptionRecord>()
                 .eq(AdoptionRecord::getUserId, userId)
@@ -71,7 +93,7 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
                 .last("LIMIT 1")
         );
 
-        if (record == null) return;
+        if (record == null) return null;
 
         // 2. Calculate Stats
         // Count total tasks (COMPLETED + OVERDUE) for this plant and user
@@ -96,14 +118,20 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
         }
 
         // 3. Calculate health score (30%)
+        int adoptionDays = calculateAdoptionDurationDays(record.getStartDate(), record.getEndDate());
         BigDecimal healthScore = new BigDecimal("100.00");
-        Long abnormalityCount = abnormalityMapper.selectCount(new LambdaQueryWrapper<PlantAbnormality>()
-                .eq(PlantAbnormality::getPlantId, plantId)
-                .eq(PlantAbnormality::getStatus, "PENDING") // Currently sick
-        );
-        if (abnormalityCount > 0) {
-            healthScore = healthScore.subtract(new BigDecimal(abnormalityCount).multiply(new BigDecimal("10")));
-            if (healthScore.compareTo(BigDecimal.ZERO) < 0) healthScore = BigDecimal.ZERO;
+        
+        if (adoptionDays < 30) {
+            healthScore = BigDecimal.ZERO;
+        } else {
+            Long abnormalityCount = abnormalityMapper.selectCount(new LambdaQueryWrapper<PlantAbnormality>()
+                    .eq(PlantAbnormality::getPlantId, plantId)
+                    .eq(PlantAbnormality::getStatus, "PENDING") // Currently sick
+            );
+            if (abnormalityCount > 0) {
+                healthScore = healthScore.subtract(new BigDecimal(abnormalityCount).multiply(new BigDecimal("10")));
+                if (healthScore.compareTo(BigDecimal.ZERO) < 0) healthScore = BigDecimal.ZERO;
+            }
         }
 
         // 4. Composite Score
@@ -126,7 +154,7 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
         }
         achievement.setAdoptionStartDate(record.getStartDate());
         achievement.setAdoptionEndDate(record.getEndDate());
-        achievement.setAdoptionDurationDays(calculateAdoptionDurationDays(record.getStartDate(), record.getEndDate()));
+        achievement.setAdoptionDurationDays(adoptionDays);
 
         achievement.setTotalTasks(total.intValue());
         achievement.setCompletedTasks(completed.intValue());
@@ -143,14 +171,22 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
         // 人工复审通过后，允许继续更新统计字段，但不再覆盖最终评比状态
         if (achievement.getIsOutstanding() != null && achievement.getIsOutstanding() == 1) {
             this.saveOrUpdate(achievement);
-            return;
+            return null;
         }
 
         // 异常1: 数据缺失校验
         if (total == 0) {
             achievement.setIsOutstanding(3); // 3: 待补全数据
             this.saveOrUpdate(achievement);
-            throw new RuntimeException("由于数据缺失而不能进行评价，已将该用户标记为“需要补充数据”");
+            return "由于数据缺失而不能进行评价，已将该用户标记为“需要补充数据”";
+        }
+
+        // 认养时长不足一个月，不得进入候选名单
+        if (achievement.getAdoptionDurationDays() == null || achievement.getAdoptionDurationDays() < 30) {
+            achievement.setIsOutstanding(0);
+            achievement.setCertificateUrl(null);
+            this.saveOrUpdate(achievement);
+            return null;
         }
 
         // 任务完成率未达 100% 的拦截逻辑
@@ -158,7 +194,7 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
             achievement.setIsOutstanding(0);
             achievement.setCertificateUrl(null);
             this.saveOrUpdate(achievement);
-            return; // 终止后续评分和评优判断
+            return null; // 终止后续评分和评优判断
         }
 
         // 异常2: 评分计算校验
@@ -178,8 +214,9 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
             for (User admin : admins) {
                 AbnormalityWebSocket.sendMessage(admin.getId(), "【系统告警】综合评分计算服务异常或规则参数缺失，请检查！");
             }
-            throw new RuntimeException("评分计算服务异常，已中止本次评比并告警管理员，待修复后重新计算。");
+            return "评分计算服务异常，已中止本次评比并告警管理员，待修复后重新计算。";
         }
+        return null;
     }
 
     @Override
@@ -214,16 +251,28 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
                     .eq(AdoptionRecord::getUserId, user.getId())
                     .orderByDesc(AdoptionRecord::getCreatedAt));
 
+            // 以当前用户最近的一条认养记录作为本周期成果评比的认养依据
+            if (records.isEmpty()) {
+                continue;
+            }
+            AdoptionRecord latestRecord = records.get(0);
+            int adoptionDays = calculateAdoptionDurationDays(latestRecord.getStartDate(), latestRecord.getEndDate());
+
             // 6. Calculate health score (30%)
             // Basic logic: Start with 100, deduct for abnormalities
             BigDecimal healthScore = new BigDecimal("100.00");
-            Long abnormalityCount = abnormalityMapper.selectCount(new LambdaQueryWrapper<PlantAbnormality>()
-                    .inSql(PlantAbnormality::getPlantId, "SELECT plant_id FROM adoption_records WHERE user_id = " + user.getId())
-                    .eq(PlantAbnormality::getStatus, "PENDING") // Currently sick
-            );
-            if (abnormalityCount > 0) {
-                healthScore = healthScore.subtract(new BigDecimal(abnormalityCount).multiply(new BigDecimal("10")));
-                if (healthScore.compareTo(BigDecimal.ZERO) < 0) healthScore = BigDecimal.ZERO;
+            
+            if (adoptionDays < 30) {
+                healthScore = BigDecimal.ZERO;
+            } else {
+                Long abnormalityCount = abnormalityMapper.selectCount(new LambdaQueryWrapper<PlantAbnormality>()
+                        .inSql(PlantAbnormality::getPlantId, "SELECT plant_id FROM adoption_records WHERE user_id = " + user.getId())
+                        .eq(PlantAbnormality::getStatus, "PENDING") // Currently sick
+                );
+                if (abnormalityCount > 0) {
+                    healthScore = healthScore.subtract(new BigDecimal(abnormalityCount).multiply(new BigDecimal("10")));
+                    if (healthScore.compareTo(BigDecimal.ZERO) < 0) healthScore = BigDecimal.ZERO;
+                }
             }
 
             // 7. Composite Score = (Task Completion Rate + Health Score) / 2
@@ -242,17 +291,10 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
                 achievement.setAdoptionCycle(adoptionCycle);
             }
 
-            // 以当前用户最近的一条认养记录作为本周期成果评比的认养依据
-            if (records.isEmpty()) {
-                continue;
-            }
-            AdoptionRecord latestRecord = records.get(0);
             achievement.setPlantId(latestRecord.getPlantId());
             achievement.setAdoptionStartDate(latestRecord.getStartDate());
             achievement.setAdoptionEndDate(latestRecord.getEndDate());
-            achievement.setAdoptionDurationDays(
-                    calculateAdoptionDurationDays(latestRecord.getStartDate(), latestRecord.getEndDate())
-            );
+            achievement.setAdoptionDurationDays(adoptionDays);
             
             achievement.setTotalTasks(total.intValue());
             achievement.setCompletedTasks(completed.intValue());
@@ -275,6 +317,14 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
                 achievement.setIsOutstanding(3); // 3: 待补全数据
                 this.saveOrUpdate(achievement);
                 continue; // 记录后跳过评分
+            }
+
+            // 认养时长不足一个月，不得进入候选名单
+            if (achievement.getAdoptionDurationDays() == null || achievement.getAdoptionDurationDays() < 30) {
+                achievement.setIsOutstanding(0);
+                achievement.setCertificateUrl(null);
+                this.saveOrUpdate(achievement);
+                continue;
             }
 
             // 任务完成率未达 100% 的拦截逻辑
@@ -469,57 +519,61 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
             g2d.drawString(watermark, wmX, height / 2);
             g2d.setTransform(old);
 
-            String realName = user.getRealName();
+            String realName = achievement.getUserRealName();
+            if (realName == null || realName.trim().isEmpty()) {
+                realName = user.getRealName();
+            }
             if (realName == null || realName.trim().isEmpty()) {
                 realName = user.getUsername();
             }
             String certificateNo = "SP-" + adoptionCycle.replaceAll("[^A-Za-z0-9]", "") + "-" + userId;
             String issueDate = LocalDate.now().toString();
+            String awardName = "优秀养护人";
             String scoreText = achievement.getCompositeScore() == null
                     ? "综合评分：-"
                     : "综合评分：" + achievement.getCompositeScore().setScale(0, RoundingMode.HALF_UP) + " 分";
 
             g2d.setColor(new java.awt.Color(60, 60, 60));
-            g2d.setFont(new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 20));
+            g2d.setFont(createCertificateFont(java.awt.Font.PLAIN, 20));
             g2d.drawString("证书编号：" + certificateNo, 90, 120);
             g2d.drawString("认养周期：" + adoptionCycle, 90, 150);
 
             g2d.setColor(new java.awt.Color(33, 53, 82));
-            g2d.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 64));
+            g2d.setFont(createCertificateFont(java.awt.Font.BOLD, 64));
             String title = "荣誉证书";
             java.awt.FontMetrics titleFm = g2d.getFontMetrics();
             int titleX = (width - titleFm.stringWidth(title)) / 2;
             g2d.drawString(title, titleX, 220);
 
             g2d.setColor(new java.awt.Color(212, 175, 55));
-            g2d.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 34));
-            String subtitle = "优秀养护人";
+            g2d.setFont(createCertificateFont(java.awt.Font.BOLD, 34));
+            String subtitle = awardName;
             java.awt.FontMetrics subFm = g2d.getFontMetrics();
             int subX = (width - subFm.stringWidth(subtitle)) / 2;
             g2d.drawString(subtitle, subX, 280);
 
             g2d.setColor(new java.awt.Color(70, 70, 70));
-            g2d.setFont(new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 28));
+            g2d.setFont(createCertificateFont(java.awt.Font.PLAIN, 28));
             String line1 = "兹授予";
             java.awt.FontMetrics line1Fm = g2d.getFontMetrics();
             int line1X = (width - line1Fm.stringWidth(line1)) / 2;
             g2d.drawString(line1, line1X, 380);
 
             g2d.setColor(new java.awt.Color(20, 20, 20));
-            g2d.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 56));
+            g2d.setFont(createCertificateFont(java.awt.Font.BOLD, 56));
             java.awt.FontMetrics nameFm = g2d.getFontMetrics();
             int nameX = (width - nameFm.stringWidth(realName)) / 2;
             g2d.drawString(realName, nameX, 455);
 
             g2d.setColor(new java.awt.Color(70, 70, 70));
-            g2d.setFont(new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 26));
-            String line2 = "在校园植物认养项目中表现优异，特颁发此证。";
+            g2d.setFont(createCertificateFont(java.awt.Font.PLAIN, 26));
+            String line2 = "在校园植物认养项目中表现优异，特授予 " + awardName + " 称号。";
             java.awt.FontMetrics line2Fm = g2d.getFontMetrics();
             int line2X = (width - line2Fm.stringWidth(line2)) / 2;
             g2d.drawString(line2, line2X, 535);
 
             g2d.setColor(new java.awt.Color(60, 60, 60));
-            g2d.setFont(new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 24));
+            g2d.setFont(createCertificateFont(java.awt.Font.PLAIN, 24));
             java.awt.FontMetrics scoreFm = g2d.getFontMetrics();
             int scoreX = (width - scoreFm.stringWidth(scoreText)) / 2;
             g2d.drawString(scoreText, scoreX, 585);
@@ -529,13 +583,13 @@ public class AchievementServiceImpl extends ServiceImpl<AchievementMapper, Achie
             g2d.setColor(new java.awt.Color(200, 40, 40, 200));
             g2d.setStroke(new java.awt.BasicStroke(6));
             g2d.drawOval(sealCx - 90, sealCy - 90, 180, 180);
-            g2d.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 26));
+            g2d.setFont(createCertificateFont(java.awt.Font.BOLD, 26));
             String sealText = "认证";
             java.awt.FontMetrics sealFm = g2d.getFontMetrics();
             g2d.drawString(sealText, sealCx - sealFm.stringWidth(sealText) / 2, sealCy + 10);
 
             g2d.setColor(new java.awt.Color(60, 60, 60));
-            g2d.setFont(new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 22));
+            g2d.setFont(createCertificateFont(java.awt.Font.PLAIN, 22));
             String org = "校园植物认养系统";
             java.awt.FontMetrics orgFm = g2d.getFontMetrics();
             int orgX = width - 90 - orgFm.stringWidth(org);

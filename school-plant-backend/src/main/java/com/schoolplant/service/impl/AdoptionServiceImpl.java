@@ -505,7 +505,7 @@ public class AdoptionServiceImpl extends ServiceImpl<AdoptionRecordMapper, Adopt
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void finishAdoption(Long userId, Long recordId) {
+    public String finishAdoption(Long userId, Long recordId) {
         AdoptionRecord record = recordMapper.selectById(recordId);
         if (record == null) {
             throw new RuntimeException("记录不存在");
@@ -531,11 +531,13 @@ public class AdoptionServiceImpl extends ServiceImpl<AdoptionRecordMapper, Adopt
         }
 
         // 3. 结算成果
-        achievementService.updateUserAchievement(userId, record.getPlantId());
+        String msg = achievementService.updateUserAchievement(userId, record.getPlantId());
         
         // 4. 发送通知
         notificationService.sendNotification(userId, "认养圆满完成", 
                 String.format("您对植物《%s》的认养已顺利结束，感谢您的悉心照顾！您可以在“认养成果”中查看本次评价。", 
                 plant != null ? plant.getName() : "植物"), "SYSTEM");
+                
+        return msg;
     }
 }

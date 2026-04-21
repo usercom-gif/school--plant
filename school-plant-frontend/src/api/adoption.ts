@@ -95,7 +95,7 @@ export function cancelApplication(applicationId: number) {
 }
 
 export function finishAdoption(recordId: number) {
-  return request<any, void>({
+  return request<any, string | void>({
     url: "/adoption/finish",
     method: "post",
     params: { recordId },

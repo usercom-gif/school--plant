@@ -52,7 +52,7 @@ public class PlantController {
 
     @Operation(summary = "新增植物")
     @SaCheckLogin
-    @SaCheckRole(value = {"ADMIN", "MAINTAINER"}, mode = SaMode.OR)
+    @SaCheckRole(value = {"ADMIN", "MAINTAINER", "USER"}, mode = SaMode.OR)
     @Log(module = "PLANT", desc = "新增植物", type = "INSERT", key = "#request.name")
     @PostMapping
     public R<Void> add(@Validated @RequestBody PlantAddRequest request) {
@@ -62,7 +62,7 @@ public class PlantController {
 
     @Operation(summary = "修改植物")
     @SaCheckLogin
-    @SaCheckRole(value = {"ADMIN", "MAINTAINER"}, mode = SaMode.OR)
+    @SaCheckRole(value = {"ADMIN", "MAINTAINER", "USER"}, mode = SaMode.OR)
     @Log(module = "PLANT", desc = "修改植物", type = "UPDATE", key = "#request.id")
     @PutMapping
     public R<Void> update(@Validated @RequestBody PlantUpdateRequest request) {
@@ -72,7 +72,7 @@ public class PlantController {
 
     @Operation(summary = "删除植物")
     @SaCheckLogin
-    @SaCheckRole(value = {"ADMIN", "MAINTAINER"}, mode = SaMode.OR)
+    @SaCheckRole(value = {"ADMIN", "MAINTAINER", "USER"}, mode = SaMode.OR)
     @Log(module = "PLANT", desc = "删除植物", type = "DELETE", key = "#ids")
     @DeleteMapping("/{ids}")
     public R<Void> remove(@PathVariable List<Long> ids) {

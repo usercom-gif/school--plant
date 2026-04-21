@@ -221,6 +221,16 @@ const getPlantImage = (record: any) => {
   return "/images/default-plant.png";
 };
 
+const calculateAdoptionDays = (startDate?: string) => {
+  if (!startDate) return 0;
+  const start = new Date(startDate);
+  const today = new Date();
+  start.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  const diff = today.getTime() - start.getTime();
+  return Math.max(Math.floor(diff / (1000 * 60 * 60 * 24)) + 1, 0);
+};
+
 const fetchData = async () => {
   loading.value = true;
   try {
@@ -249,15 +259,27 @@ const handleTask = (record: any) => {
 };
 
 const handleFinish = (record: any) => {
+  const adoptionDays = calculateAdoptionDays(record.startDate);
+  const isShortAdoption = adoptionDays > 0 && adoptionDays < 30;
+  const content = isShortAdoption
+    ? `您当前对植物《${record.plantName}》的认养时长仅为 ${adoptionDays} 天，小于 30 天，将无法进入成果评比候选名单。是否仍要提交成果并结束认养？`
+    : `确定要结束对植物《${record.plantName}》的认养吗？系统将根据您的养护打卡率和植物健康状况生成最终评价。结束后该植物将重新开放认养。`;
+
   Modal.confirm({
     title: "提交认养成果并结束认养",
-    content: `确定要结束对植物《${record.plantName}》的认养吗？系统将根据您的养护打卡率和植物健康状况生成最终评价。结束后该植物将重新开放认养。`,
+    content,
     okText: "确认提交",
     cancelText: "取消",
     onOk: async () => {
       try {
-        await finishAdoption(record.id);
-        message.success("认养成果提交成功！");
+        const res = await finishAdoption(record.id);
+        if (res && typeof res === "string") {
+          message.warning(res);
+        } else if (isShortAdoption) {
+          message.warning("成果已提交，但因认养时长不足 30 天，不会进入评比候选名单");
+        } else {
+          message.success("认养成果提交成功！");
+        }
         fetchData();
       } catch (e: any) {
         message.error("提交失败");

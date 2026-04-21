@@ -16,6 +16,7 @@ import com.schoolplant.mapper.KnowledgePostMapper;
 import com.schoolplant.mapper.PostLikeMapper;
 import com.schoolplant.mapper.UserMapper;
 import com.schoolplant.service.KnowledgePostService;
+import com.schoolplant.service.SystemNotificationService;
 import com.schoolplant.service.UserService;
 import com.schoolplant.websocket.AbnormalityWebSocket;
 import com.schoolplant.vo.KnowledgePostVO;
@@ -177,6 +178,9 @@ public class KnowledgePostServiceImpl extends ServiceImpl<KnowledgePostMapper, K
         this.removeById(id);
     }
 
+    @Autowired
+    private SystemNotificationService notificationService;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void auditPost(Long id, boolean pass, String rejectionReason) {
@@ -184,12 +188,30 @@ public class KnowledgePostServiceImpl extends ServiceImpl<KnowledgePostMapper, K
         if (post == null) {
             throw new RuntimeException("帖子不存在");
         }
+        
+        Long adminId = StpUtil.getLoginIdAsLong();
+        User admin = userMapper.selectById(adminId);
+        String adminInfo = admin != null ? String.format("%s (%s)", admin.getRealName(), admin.getPhone()) : "管理员";
+
         if (pass) {
             post.setStatus("ACTIVE");
+            // 通知作者审核通过
+            notificationService.sendNotification(
+                post.getAuthorId(),
+                "知识帖子审核通过",
+                String.format("您发布的帖子《%s》已通过审核，现已在社区展示！", post.getTitle()),
+                "SYSTEM"
+            );
         } else {
             post.setStatus("REJECTED");
-            // 这里可以记录驳回原因到 extra 字段或发送通知，目前暂存日志或不做持久化（需求提到仅发布者可见，可能需要字段存储）
-            // 简单起见，假设通过系统通知或 status 本身传达
+            // 通知作者被驳回的原因
+            String reasonStr = org.springframework.util.StringUtils.hasText(rejectionReason) ? rejectionReason : "不符合社区规范";
+            notificationService.sendNotification(
+                post.getAuthorId(),
+                "知识帖子审核未通过",
+                String.format("您发布的帖子《%s》未通过审核。驳回原因：%s。如有疑问请联系%s", post.getTitle(), reasonStr, adminInfo),
+                "SYSTEM"
+            );
         }
         this.updateById(post);
     }

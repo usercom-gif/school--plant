@@ -159,8 +159,8 @@
         <div v-if="useCustomPlan" class="bg-gray-50 p-4 rounded-md">
           <div class="mb-4 text-sm text-orange-500">
             <InfoCircleOutlined />
-            注意：自定义任务的总频率不得低于系统默认要求。打卡时间统一为每日
-            13:00。
+            注意：自定义任务的总频率不得低于系统默认要求。打卡时间统一为当天的
+            00:00:00 到 23:59:59。
           </div>
 
           <div

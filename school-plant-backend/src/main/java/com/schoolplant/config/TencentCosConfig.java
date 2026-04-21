@@ -8,13 +8,13 @@ import com.qcloud.cos.http.HttpProtocol;
 import com.qcloud.cos.region.Region;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 @Configuration
 @EnableConfigurationProperties(TencentCosProperties.class)
-@Conditional(TencentCosEnabledCondition.class)
+@ConditionalOnProperty(name = "school-plant.storage", havingValue = "cos")
 public class TencentCosConfig {
 
     @Autowired

@@ -108,5 +108,5 @@ public interface AdoptionService extends IService<AdoptionRecord> {
      * @param userId 用户ID
      * @param recordId 记录ID
      */
-    void finishAdoption(Long userId, Long recordId);
+    String finishAdoption(Long userId, Long recordId);
 }

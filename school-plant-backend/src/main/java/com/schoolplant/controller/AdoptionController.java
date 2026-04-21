@@ -109,9 +109,12 @@ public class AdoptionController {
     @SaCheckLogin
     @Log(module = "ADOPTION", desc = "完成认养并提交成果", type = "UPDATE", key = "#recordId")
     @PostMapping("/finish")
-    public R<Void> finish(@RequestParam Long recordId) {
+    public R<String> finish(@RequestParam Long recordId) {
         Long userId = StpUtil.getLoginIdAsLong();
-        adoptionService.finishAdoption(userId, recordId);
+        String msg = adoptionService.finishAdoption(userId, recordId);
+        if (msg != null) {
+            return R.ok(msg);
+        }
         return R.ok();
     }
 
